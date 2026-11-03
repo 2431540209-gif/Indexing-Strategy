@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo Indexing – MySQL</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main>
+    <h1>Demo chỉ mục (Indexing Strategy)</h1>
+    <p class="sub">Bảng <code>books</code> chạy thật trên MySQL của XAMPP qua <code>api.php</code>.</p>
+
+    <div class="card">
+      <div class="row">
+        <label>Thuật toán <select id="algo"></select></label>
+        <label>Số dòng
+          <select id="size">
+            <option value="100000">100.000</option>
+            <option value="500000" selected>500.000</option>
+            <option value="1000000">1.000.000</option>
+          </select>
+        </label>
+        <button id="gen" disabled>1. Tạo dữ liệu</button>
+        <label>Truy vấn <select id="scn"></select></label>
+        <button id="run" disabled>2. Chạy so sánh</button>
+      </div>
+      <div id="status">Đang kết nối…</div>
+    </div>
+
+    <div class="card info" id="info"></div>
+    <div id="results"></div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
