@@ -4,35 +4,139 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo Indexing – MySQL</title>
+  <title>MySQL Indexing Strategy – Benchmark & Visualizer</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <main>
-    <h1>Demo chỉ mục (Indexing Strategy)</h1>
-    <p class="sub">Bảng <code>books</code> chạy thật trên MySQL của XAMPP qua <code>api.php</code>.</p>
-
-    <div class="card">
-      <div class="row">
-        <label>Thuật toán <select id="algo"></select></label>
-        <label>Số dòng
-          <select id="size">
-            <option value="100000">100.000</option>
-            <option value="500000" selected>500.000</option>
-            <option value="1000000">1.000.000</option>
-          </select>
-        </label>
-        <button id="gen" disabled>1. Tạo dữ liệu</button>
-        <label>Truy vấn <select id="scn"></select></label>
-        <button id="run" disabled>2. Chạy so sánh</button>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-main">
+        <div class="logo-area">
+          <span class="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+          </span>
+          <div>
+            <h1>Demo Chiến Lược Đánh Chỉ Mục (Indexing Strategy)</h1>
+            <p class="subtitle">Thử nghiệm và đo lường trực tiếp hiệu năng trên MySQL InnoDB</p>
+          </div>
+        </div>
+        <div class="db-badge" id="dbBadge">
+          <span class="status-dot"></span>
+          <span id="dbStatusText">Đang kiểm tra kết nối...</span>
+        </div>
       </div>
-      <div id="status">Đang kết nối…</div>
-    </div>
+    </header>
 
-    <div class="card info" id="info"></div>
-    <div id="results"></div>
-  </main>
+    <!-- Main Content -->
+    <main>
+      <!-- Knowledge Section (Frontend quản lý nội dung giải thích lý thuyết theo thuật toán) -->
+      <section class="card knowledge-card" id="knowledgeCard">
+        <div class="knowledge-header">
+          <div class="knowledge-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span id="algoTitle">Hiểu nhanh về B-Tree Index</span>
+          </div>
+          <span class="tag-algo" id="algoBadge">B-tree Index</span>
+        </div>
+        <div class="knowledge-body" id="algoBody">
+          <!-- Nội dung lý thuyết render linh hoạt theo thuật toán được chọn -->
+        </div>
+      </section>
+
+      <!-- Control Panels -->
+      <div class="control-grid">
+        <!-- Panel 1: Sinh dữ liệu mẫu -->
+        <section class="card control-card">
+          <div class="card-heading">
+            <span class="step-num">1</span>
+            <h2>Chuẩn bị dữ liệu</h2>
+          </div>
+          <div class="form-group">
+            <label for="size">Quy mô dữ liệu (Số dòng sách)</label>
+            <select id="size">
+              <option value="100000">100.000 dòng</option>
+              <option value="500000" selected>500.000 dòng</option>
+              <option value="1000000">1.000.000 dòng</option>
+            </select>
+          </div>
+          <button id="genBtn" class="btn btn-secondary" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Tạo lại dữ liệu mẫu
+          </button>
+          
+          <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="status-msg" id="genStatus">Đang khởi tạo...</div>
+        </section>
+
+        <!-- Panel 2: Chạy kiểm thử so sánh -->
+        <section class="card control-card">
+          <div class="card-heading">
+            <span class="step-num">2</span>
+            <h2>Chạy Benchmark so sánh</h2>
+          </div>
+          <div class="form-group">
+            <label for="algoSelect">Thuật toán chỉ mục</label>
+            <select id="algoSelect"></select>
+          </div>
+          <div class="form-group">
+            <label for="scn">Kịch bản kiểm thử</label>
+            <select id="scn"></select>
+          </div>
+          <div class="action-buttons">
+            <button id="runBtn" class="btn btn-primary" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              Chạy kiểm thử so sánh
+            </button>
+            <button id="clearBtn" class="btn btn-ghost" title="Xóa lịch sử đo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Xóa lịch sử
+            </button>
+          </div>
+          <div class="status-msg" id="runStatus">Sẵn sàng chạy so sánh</div>
+        </section>
+      </div>
+
+      <!-- Results Section -->
+      <section class="results-section">
+        <div class="results-header">
+          <h2>Kết quả kiểm thử &amp; Phân tích hiệu năng</h2>
+          <span class="results-count" id="resultsCount">Chưa có lượt chạy nào</span>
+        </div>
+
+        <div id="resultsList" class="results-list">
+          <div class="empty-state" id="emptyState">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 3v18h18"></path>
+              <path d="m19 9-5 5-4-4-3 3"></path>
+            </svg>
+            <p>Chưa có dữ liệu đo lường.</p>
+            <span>Hãy bấm nút <strong>"Chạy kiểm thử so sánh"</strong> để đối chiếu hiệu năng giữa Full Table Scan và B-tree Index.</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <script src="script.js"></script>
 </body>
