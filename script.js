@@ -80,22 +80,26 @@ const ALGORITHMS = {
   },
   bitmap: {
     name: 'Bitmap Index',
-    badge: 'Chưa kích hoạt',
-    ready: false,
-    summary: '<strong>Bitmap Index</strong> sử dụng chuỗi bit (0 và 1) cho từng giá trị phân biệt của cột. Thường phổ biến trong các hệ thống Data Warehouse (Oracle, PostgreSQL mở rộng).',
+    badge: 'Đã kích hoạt (mô phỏng)',
+    ready: true,
+    summary: '<strong>Bitmap Index</strong> lưu, với <em>mỗi giá trị phân biệt</em> của cột, một chuỗi bit dài bằng số dòng của bảng: bit thứ <code>i</code> = 1 nếu dòng thứ <code>i</code> mang giá trị đó. Nhiều điều kiện được kết hợp bằng phép <code>AND</code>/<code>OR</code>/<code>NOT</code> trên bit rồi đếm bit 1 (popcount). MySQL InnoDB không có bitmap index gốc, nên demo này <strong>tự cài đặt</strong> cấu trúc đó (lưu trong bảng <code>bitmap_index</code>) và so sánh với Full Scan và B-tree.',
     pros: [
-      'Cực kỳ tối ưu cho các cột có độ phân biệt thấp (Low Cardinality) như giới tính, trạng thái đơn.',
-      'Các phép toán <code>AND</code>, <code>OR</code>, <code>NOT</code> thực hiện trực tiếp trên phép toán bit ở cấp CPU.'
+      'Rất tối ưu cho cột có độ phân biệt thấp (Low Cardinality): thể loại, trạng thái, giới tính...',
+      'Kết hợp nhiều cột bằng <code>AND</code>/<code>OR</code>/<code>NOT</code> trên bit cực nhanh; <code>COUNT(*)</code> chỉ cần đếm bit mà không đọc bảng.',
+      'Nhiều index đơn cột phối hợp được với nhau, không cần tạo index tổ hợp cho từng cách kết hợp cột.',
+      'Chuỗi bit thưa/lặp nén rất tốt (WAH, BBC, Roaring).'
     ],
     cons: [
-      'MySQL / MariaDB InnoDB mặc định không hỗ trợ trực tiếp kiểu index này.',
-      'Chi phí khoá và cập nhật cao khi có nhiều tác vụ ghi đồng thời.'
+      'Cột có độ phân biệt cao (price, isbn) sẽ sinh quá nhiều bitmap, kích thước tăng theo <code>số giá trị × số dòng</code>.',
+      'Cập nhật tốn kém: sửa 1 dòng phải sửa bitmap của giá trị cũ và mới, khoá cả đoạn bitmap nên nhiều giao dịch ghi đồng thời bị chặn lẫn nhau.',
+      'Phù hợp Data Warehouse/OLAP (Oracle, Doris, StarRocks), không hợp hệ thống OLTP ghi nhiều.'
     ]
   }
 };
 
 let ROWS = 0;
 let BACKEND_SCENARIOS = [];
+let BITMAP_SCENARIOS = [];
 let CONFIG = {
   apiEndpoint: 'api.php',
   chunkSize: 50000,
@@ -192,7 +196,7 @@ function updateSelectedAlgorithm() {
   const scnSelect = $('#scn');
   if (algo.ready) {
     scnSelect.disabled = false;
-    scnSelect.innerHTML = BACKEND_SCENARIOS
+    scnSelect.innerHTML = (key === 'bitmap' ? BITMAP_SCENARIOS : BACKEND_SCENARIOS)
       .map((s) => `<option value="${s.key}">${esc(s.name)}</option>`)
       .join('');
     $('#runBtn').disabled = ROWS === 0;
@@ -253,12 +257,15 @@ async function runBenchmark() {
   const scenarioKey = $('#scn').value;
   if (!scenarioKey) return;
 
+  const isBitmap = $('#algoSelect').value === 'bitmap';
   setBusy(true);
-  setStatus('#runStatus', 'Đang thực thi: Quét tuần tự → Đánh B-tree index → Đo lại...', '');
+  setStatus('#runStatus', isBitmap
+    ? 'Đang thực thi: Full Scan → B-tree → Dựng bitmap → Đo lại (có thể mất vài giây)...'
+    : 'Đang thực thi: Quét tuần tự → Đánh B-tree index → Đo lại...', '');
 
   try {
-    const res = await api('run', { scenario: scenarioKey });
-    renderBenchmarkResult(res);
+    if (isBitmap) renderBitmapResult(await api('run_bitmap', { scenario: scenarioKey }));
+    else renderBenchmarkResult(await api('run', { scenario: scenarioKey }));
     setStatus('#runStatus', 'Kiểm thử hoàn tất! Index mẫu đã tự động được dọn dẹp.', 'success');
   } catch (err) {
     setStatus('#runStatus', 'Lỗi: ' + err.message, 'err');
@@ -357,6 +364,80 @@ function renderBenchmarkResult(r) {
   $('#resultsList').prepend(card);
 }
 
+// 3b. Render kết quả Bitmap Index (so sánh 3 phương án)
+function renderBitmapResult(r) {
+  const emptyState = $('#emptyState');
+  if (emptyState) emptyState.remove();
+  runCount++;
+  $('#resultsCount').textContent = `${runCount} lần chạy kiểm thử`;
+
+  const rows = [
+    ['Không Index (Full Scan)', r.A.ms, 'danger'],
+    ['B-tree (2 index đơn cột)', r.B.ms, 'warn'],
+    ['Bitmap Index (mô phỏng)', r.C.ms, 'success']
+  ];
+  const max = Math.max(...rows.map((x) => x[1]));
+  const bars = rows.map(([label, ms, cls]) => `
+    <div class="bm-row">
+      <span class="bm-label">${label}</span>
+      <div class="bm-track"><div class="bm-bar ${cls}" style="width:${Math.max(1, (ms / max) * 100).toFixed(1)}%"></div></div>
+      <span class="bm-time">${fmtTime(ms)}</span>
+    </div>`).join('');
+
+  const x = (a, b) => { const v = a / b; return v.toFixed(v >= 10 ? 0 : 1) + '×'; };
+  const ok = r.verify.sql === r.verify.bm;
+
+  const d = r.demo;
+  const matrix = `
+    <table class="bm-matrix">
+      <tr><th>Dòng (id)</th>${d.ids.map((i) => `<th>${i}</th>`).join('')}</tr>
+      <tr class="bm-real"><th>genre thực tế</th>${d.genre.map((g) => `<td title="${esc(g)}">${esc(g.slice(0, 3))}.</td>`).join('')}</tr>
+      ${Object.entries(d.bitmaps).map(([g, bits]) =>
+        `<tr><th>${esc(g)}</th>${bits.map((b) => `<td class="${b ? 'bit1' : 'bit0'}">${b}</td>`).join('')}</tr>`).join('')}
+    </table>`;
+
+  const card = `
+    <table class="bm-card-table">
+      <tr><th>Cột</th><th>Số giá trị phân biệt</th><th>Kích thước bitmap (ước tính)</th><th>Đánh giá</th></tr>
+      ${r.card.map((c) => `<tr><td>${esc(c.col)}</td><td>${c.distinct.toLocaleString('vi-VN')}</td><td>${fmtBytes(c.est_bytes)}</td>
+        <td>${c.distinct <= 100 ? '<span class="ok">Phù hợp (low cardinality)</span>' : '<span class="bad">Không phù hợp (quá nhiều bitmap)</span>'}</td></tr>`).join('')}
+    </table>`;
+
+  const el = document.createElement('article');
+  el.className = 'result-card';
+  el.innerHTML = `
+    <div class="result-header">
+      <div class="result-title-group">
+        <h3>${esc(r.name)}</h3>
+        <div class="result-meta-badge">Dữ liệu: <strong>${r.n.toLocaleString('vi-VN')} dòng</strong> · Kết quả: <strong>${r.verify.bm.toLocaleString('vi-VN')} dòng</strong>
+          · Kiểm chứng SQL = Bitmap: <strong>${ok ? '✓ khớp' : '✗ lệch'}</strong></div>
+      </div>
+      <div class="speedup-badge"><span class="speedup-val">${x(r.A.ms, r.C.ms)}</span><span class="speedup-lbl">so với Full Scan</span></div>
+    </div>
+    <div class="sql-box">${esc(r.sql)}</div>
+    <div class="bm-bars">${bars}</div>
+    <p class="bm-note">Bitmap nhanh hơn B-tree <strong>${x(r.B.ms, r.C.ms)}</strong>. Thời gian bitmap gồm cả nạp bitmap từ bảng lưu trữ.</p>
+
+    <div class="result-stats-row">
+      <div class="stat-item"><span>Build B-tree (2 index):</span><strong>${fmtTime(r.build_bt_ms)}</strong></div>
+      <div class="stat-item"><span>Build Bitmap:</span><strong>${fmtTime(r.build_bm_ms)}</strong></div>
+      <div class="stat-item"><span>Dung lượng B-tree:</span><strong>${fmtBytes(r.bt_bytes)}</strong></div>
+      <div class="stat-item"><span>Dung lượng Bitmap (thô / nén gzip):</span><strong>${fmtBytes(r.bm_raw_bytes)} / ${fmtBytes(r.bm_gz_bytes)}</strong></div>
+    </div>
+
+    <h4 class="bm-h">Cấu trúc bitmap của cột genre (16 dòng đầu)</h4>
+    <div class="bm-scroll">${matrix}</div>
+    <h4 class="bm-h">Độ phân biệt (cardinality) quyết định bitmap có đáng dùng không</h4>
+    <div class="bm-scroll">${card}</div>
+
+    <div class="explain-grid">
+      <div class="explain-col"><h4>EXPLAIN – Full Scan</h4><pre>${esc(r.planA)}</pre></div>
+      <div class="explain-col"><h4>EXPLAIN – B-tree</h4><pre>${esc(r.planB)}</pre></div>
+      <div class="explain-col"><h4>Kế hoạch – Bitmap</h4><pre>${esc(r.planC)}</pre></div>
+    </div>`;
+  $('#resultsList').prepend(el);
+}
+
 // Xóa lịch sử kết quả
 function clearResults() {
   runCount = 0;
@@ -402,6 +483,7 @@ async function init() {
     const meta = await api('meta');
     ROWS = meta.rows || 0;
     BACKEND_SCENARIOS = meta.scenarios || [];
+    BITMAP_SCENARIOS = meta.bitmap_scenarios || [];
 
     // Cập nhật trạng thái DB và giao diện theo thuật toán đang chọn
     if (ROWS > 0) {

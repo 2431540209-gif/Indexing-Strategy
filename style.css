@@ -697,3 +697,24 @@ code {
     grid-template-columns: 110px 1fr 80px;
   }
 }
+/* ===== Bitmap Index ===== */
+.bm-bars { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 6px; }
+.bm-row { display: grid; grid-template-columns: 190px 1fr 90px; align-items: center; gap: 12px; font-size: 14px; }
+.bm-track { background: rgba(148, 163, 184, 0.15); border-radius: 6px; height: 14px; overflow: hidden; }
+.bm-bar { height: 100%; border-radius: 6px; }
+.bm-bar.danger { background: var(--color-danger); }
+.bm-bar.warn { background: var(--color-warning); }
+.bm-bar.success { background: var(--color-success); }
+.bm-time { text-align: right; font-weight: 600; }
+.bm-note { font-size: 13px; opacity: .8; margin: 4px 0 12px; }
+.bm-h { margin: 18px 0 8px; font-size: 14px; }
+.bm-scroll { overflow-x: auto; }
+.bm-matrix, .bm-card-table { border-collapse: collapse; font-size: 13px; }
+.bm-matrix th, .bm-matrix td, .bm-card-table th, .bm-card-table td { border: 1px solid rgba(148, 163, 184, 0.3); padding: 4px 8px; text-align: center; white-space: nowrap; }
+.bm-matrix th:first-child, .bm-card-table th { text-align: left; }
+.bm-matrix .bit1 { background: var(--color-success); color: #fff; font-weight: 700; }
+.bm-matrix .bit0 { opacity: .45; }
+.bm-matrix .bm-real td { font-style: italic; }
+.bm-card-table .ok { color: var(--color-success); }
+.bm-card-table .bad { color: var(--color-danger); }
+@media (max-width: 640px) { .bm-row { grid-template-columns: 1fr; gap: 4px; } }

@@ -21,6 +21,7 @@ $db->select_db(DB_NAME);
  * Tạo mới hoặc reset lại bảng books với cấu hình InnoDB
  */
 function resetBooksTable($db) {
+  $db->query('DROP TABLE IF EXISTS bitmap_index'); // bitmap cũ không còn hợp lệ khi dữ liệu đổi
   $db->query('DROP TABLE IF EXISTS books');
   return $db->query('CREATE TABLE books (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
